@@ -2,6 +2,8 @@ mod handlers;
 mod services;
 mod router;
 mod utils;
+mod config;
+
 
 use axum::serve;
 use dotenv::dotenv;
