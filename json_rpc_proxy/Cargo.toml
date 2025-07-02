@@ -22,3 +22,6 @@ redis = { version = "0.25", features = ["tokio-comp"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["trace"] }
 
+jsonwebtoken = "9.2"
+tower-cookies = "0.11.0"
+

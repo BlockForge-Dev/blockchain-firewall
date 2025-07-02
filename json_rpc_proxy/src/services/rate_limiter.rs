@@ -49,3 +49,8 @@ pub async fn check_rate_limit(redis_client: &Client, ip: IpAddr) -> Result<(), S
 
     Ok(())
 }
+
+
+//git add .
+//git commit -m "feat: integrate Sprint 3 with Redis rate limiting"
+
