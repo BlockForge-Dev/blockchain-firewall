@@ -5,6 +5,9 @@ mod utils;
 mod auth;
 mod auth_middleware;
 
+
+
+
 use axum::{
     extract::ConnectInfo,
     middleware,
@@ -12,6 +15,7 @@ use axum::{
     routing::post,
     Json, Router,
 };
+use axum::routing::get;
 use handlers::rpc::handle_rpc;
 use services::rate_limiter::check_rate_limit;
 use std::{net::SocketAddr, sync::Arc};
@@ -22,37 +26,38 @@ use tower_http::trace::TraceLayer;
 use serde::{Deserialize, Serialize};
 use utils::logger::init;
 use auth::jwt::{Claims, encode_token};
+use handlers::auth::generate_token_handler;
 
-#[derive(Deserialize)]
-struct TokenRequest {
-    user_id: String,
-    role: String,
-}
+// #[derive(Deserialize)]
+// struct TokenRequest {
+//     user_id: String,
+//     role: String,
+// }
 
-#[derive(Serialize)]
-struct TokenResponse {
-    token: String,
-}
+// #[derive(Serialize)]
+// struct TokenResponse {
+//     token: String,
+// }
 
 /// Public route: POST /generate-token → returns JWT
-async fn generate_token_handler(Json(payload): Json<TokenRequest>) -> impl IntoResponse {
-    use std::time::{SystemTime, UNIX_EPOCH};
+// async fn generate_token_handler(Json(payload): Json<TokenRequest>) -> impl IntoResponse {
+//     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let exp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + 3600; // 1 hour expiry
+//     let exp = SystemTime::now()
+//         .duration_since(UNIX_EPOCH)
+//         .unwrap()
+//         .as_secs()
+//         + 3600; // 1 hour expiry
 
-    let claims = Claims {
-        sub: payload.user_id,
-        role: payload.role,
-        exp: exp as usize,
-    };
+//     let claims = Claims {
+//         sub: payload.user_id,
+//         role: payload.role,
+//         exp: exp as usize,
+//     };
 
-    let token = encode_token(&claims);
-    Json(TokenResponse { token })
-}
+//     let token = encode_token(&claims);
+//     Json(TokenResponse { token })
+// }
 
 #[tokio::main]
 async fn main() {
@@ -82,9 +87,25 @@ async fn main() {
     )
     .layer(middleware::from_fn(auth_middleware::require_jwt));
 
+
     // Public route (does not require JWT)
     let app = Router::new()
+    
         .route("/generate-token", post(generate_token_handler))
+   .route("/metrics", get(|| async {
+    use axum::http::{HeaderValue, StatusCode, header};
+    use axum::response::Response;
+    use axum::body::Body;
+
+    let body = utils::metrics::metrics_handler().await;
+    let mut response = Response::new(Body::from(body));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/plain; version=0.0.4"),
+    );
+    response
+}))
+
         .merge(protected_routes)
         .layer(
             ServiceBuilder::new()

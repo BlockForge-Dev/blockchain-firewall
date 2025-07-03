@@ -25,3 +25,8 @@ tower-http = { version = "0.5", features = ["trace"] }
 jsonwebtoken = "9.2"
 tower-cookies = "0.11.0"
 
+prometheus = "0.13"
+lazy_static = "1.4"
+bytes = "1.10.1"
+http-body = "1.0.1"
+
