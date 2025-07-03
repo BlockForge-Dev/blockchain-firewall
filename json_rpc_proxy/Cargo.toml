@@ -30,3 +30,5 @@ lazy_static = "1.4"
 bytes = "1.10.1"
 http-body = "1.0.1"
 
+notify = "6"
+

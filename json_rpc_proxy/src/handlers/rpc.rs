@@ -1,28 +1,34 @@
-use axum::Json;
+use axum::{Json, extract::State};
 use serde_json::{Value, json};
 use tracing::info;
-use crate::config::is_blocked;
 use crate::services::proxy::forward_to_upstream;
 use crate::utils::metrics::{REQUESTS, BLOCKED_REQUESTS, LATENCIES};
+use crate::config::filter_config::FilterConfig;
 
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
+use std::sync::RwLock;
 
-pub async fn handle_rpc(Json(req_body): Json<Value>) -> Result<Json<Value>, axum::http::StatusCode> {
-    // Extract method as String
+pub async fn handle_rpc(
+    State(config): State<Arc<RwLock<FilterConfig>>>,
+    Json(req_body): Json<Value>,
+) -> Result<Json<Value>, axum::http::StatusCode> {
     let method = req_body
         .get("method")
         .and_then(|m| m.as_str())
         .unwrap_or("unknown")
-        .to_string(); // ✅ convert to owned String early
+        .to_string();
 
     info!("Received JSON-RPC method: {}", method);
     REQUESTS.with_label_values(&[&method]).inc();
 
-    // Check blocklist
-    if is_blocked(&method) {
-        BLOCKED_REQUESTS.with_label_values(&["method_blocked"]).inc();
-        
+    // Read current filter rules
+    let is_blocked = {
+        let cfg = config.read().unwrap();
+        cfg.blocked_methods.contains(&method)
+    };
 
+    if is_blocked {
+        BLOCKED_REQUESTS.with_label_values(&["method_blocked"]).inc();
         let error = json!({
             "jsonrpc": "2.0",
             "id": req_body.get("id").unwrap_or(&json!(null)),
@@ -34,7 +40,6 @@ pub async fn handle_rpc(Json(req_body): Json<Value>) -> Result<Json<Value>, axum
         return Ok(Json(error));
     }
 
-    // Track latency
     let start = Instant::now();
 
     match forward_to_upstream(req_body).await {
@@ -45,7 +50,6 @@ pub async fn handle_rpc(Json(req_body): Json<Value>) -> Result<Json<Value>, axum
         }
         Err(_) => {
             BLOCKED_REQUESTS.with_label_values(&["upstream_error"]).inc();
-
             let error = json!({
                 "jsonrpc": "2.0",
                 "id": null,
