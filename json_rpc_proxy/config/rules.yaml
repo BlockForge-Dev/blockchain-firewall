@@ -2,4 +2,4 @@ blocked_methods:
   - eth_sendTransaction
   - personal_sign
   - eth_sendRawTransaction
- - eth_getBalance 
+ 

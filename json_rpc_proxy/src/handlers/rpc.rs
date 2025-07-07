@@ -1,15 +1,15 @@
-use axum::{Json, extract::State};
-use serde_json::{Value, json};
-use tracing::info;
-use crate::services::proxy::forward_to_upstream;
-use crate::utils::metrics::{REQUESTS, BLOCKED_REQUESTS, LATENCIES};
-use crate::config::filter_config::FilterConfig;
+use axum::{extract::State, Json};
+use serde_json::{json, Value};
+use tracing::{error, info};
 
-use std::{sync::Arc, time::Instant};
-use std::sync::RwLock;
+use crate::state::AppState;
+use crate::services::proxy::forward_to_upstream;
+use crate::utils::metrics::{BLOCKED_REQUESTS, LATENCIES, REQUESTS};
+
+use std::time::Instant;
 
 pub async fn handle_rpc(
-    State(config): State<Arc<RwLock<FilterConfig>>>,
+    State(state): State<AppState>,
     Json(req_body): Json<Value>,
 ) -> Result<Json<Value>, axum::http::StatusCode> {
     let method = req_body
@@ -21,14 +21,24 @@ pub async fn handle_rpc(
     info!("Received JSON-RPC method: {}", method);
     REQUESTS.with_label_values(&[&method]).inc();
 
-    // Read current filter rules
-    let is_blocked = {
-        let cfg = config.read().unwrap();
-        cfg.blocked_methods.contains(&method)
-    };
+    // Check config + plugin
+   let is_blocked = {
+    let cfg = state.config.read().unwrap();
 
+    let plugin_result = state
+        .plugin
+        .lock()
+        .map(|mut plugin| plugin.should_allow(&method))
+        .unwrap_or(false);
+
+    cfg.blocked_methods.contains(&method) || !plugin_result
+};
+
+    // If blocked, return error response
     if is_blocked {
-        BLOCKED_REQUESTS.with_label_values(&["method_blocked"]).inc();
+        BLOCKED_REQUESTS
+            .with_label_values(&["method_blocked"])
+            .inc();
         let error = json!({
             "jsonrpc": "2.0",
             "id": req_body.get("id").unwrap_or(&json!(null)),
@@ -40,16 +50,19 @@ pub async fn handle_rpc(
         return Ok(Json(error));
     }
 
+    // Forward to upstream
     let start = Instant::now();
-
     match forward_to_upstream(req_body).await {
         Ok(resp) => {
             let duration = start.elapsed().as_secs_f64();
             LATENCIES.with_label_values(&[&method]).observe(duration);
             Ok(Json(resp))
         }
-        Err(_) => {
-            BLOCKED_REQUESTS.with_label_values(&["upstream_error"]).inc();
+        Err(err) => {
+            error!("Failed to forward to upstream: {}", err);
+            BLOCKED_REQUESTS
+                .with_label_values(&["upstream_error"])
+                .inc();
             let error = json!({
                 "jsonrpc": "2.0",
                 "id": null,

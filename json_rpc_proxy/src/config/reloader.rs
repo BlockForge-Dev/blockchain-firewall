@@ -1,4 +1,5 @@
-use crate::FilterConfig;
+use crate::config::filter_config::FilterConfig;
+
 use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     fs,

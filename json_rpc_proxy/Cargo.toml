@@ -32,3 +32,7 @@ http-body = "1.0.1"
 
 notify = "6"
 
+wasmtime = "16"
+wasmtime-wasi = { version = "16", features = ["sync"] }
+
+
