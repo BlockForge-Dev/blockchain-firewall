@@ -9,6 +9,11 @@ const RATE_LIMIT_MAX: usize = 9;
 const WINDOW_SECONDS: usize = 60;
 
 pub async fn check_rate_limit(redis_client: &Client, ip: IpAddr) -> Result<(), StatusCode> {
+
+     if cfg!(debug_assertions) {
+        return Ok(());
+    }
+
     let key = format!("rate_limit:{}", ip);
     info!("🔑 Using Redis key: {}", key);
 

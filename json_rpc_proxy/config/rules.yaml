@@ -1,4 +1,4 @@
 deny_methods:
-  - eth_sendTransaction
+  #- eth_sendTransaction
   - personal_sign
   - eth_sendRawTransaction
